@@ -1,11 +1,7 @@
 import { vec2, vec3, mat4, quat } from 'gl-matrix';
 import Turtle from './Turtle';
 import Edge from './Edge';
-
-// A stack of Turtles to represent your Turtle history. Push a copy of your current
-// Turtle onto this when you reach a [ while drawing, and pop the top Turtle from the
-// stack and make it your current Turtle when you encounter a ]. Note that in TypeScript,
-// push() and pop() operations can be done on regular arrays.
+import TerrainInfo from './TerrainInfo'
 
 export default class Lsystem {
 
@@ -14,11 +10,12 @@ export default class Lsystem {
     num_iterations: number;
     highway_trans_mat: mat4[];
     road_trans_mat: mat4[];
-    population_seed: vec2;
-    elevation_seed: vec2;
     threshold: number;
 
     edges: Edge[];
+    population_seed: vec2;
+    elevation_seed: vec2;
+    terrain: TerrainInfo;
     intersections: vec2[];
 
     constructor(num_iterations: number, population_seed: vec2, elevation_seed: vec2) {
@@ -27,66 +24,63 @@ export default class Lsystem {
       this.road_trans_mat = [];
       this.turtle_stack = [];
       this.intersections = [];
+
+      this.terrain = new TerrainInfo(population_seed, elevation_seed);
+
       this.edges = [];
-      this.elevation_seed = elevation_seed;
       this.population_seed = population_seed;
+      this.elevation_seed = elevation_seed;
+
       let init = quat.create();
       quat.fromEuler(init, 0, 0,0);
       this.turtle = new Turtle(vec3.fromValues(0.5, 0.0, 0.0), init, vec3.fromValues(2, 7.0, 1.0), 0.1);
+      // this.expandRoad();
       this.generateHighway();
       this.generateRoad();
    }
+   // Recursive System
+   expandRoad() {
+     console.log("generating road");
+     for (let i=0; i < this.num_iterations; i++) {
+       this.turtle.moveForward();
+       this.validateTurtle(this.turtle);
+       this.pushState();
+       this.edges.push(this.getEdge(this.turtle));
+
+       //** +/-: Choose 3 random radial directions and check for highest/threshold **//
+       let max = 0;
+       let max_turtle: Turtle;
+       let rotation;
+       for (let j = 1; j < 3; j++) {
+         let dup = this.copy(this.turtle);
+         rotation = Math.random() * 30;
+         dup.moveForward();
+         dup.adjust(rotation);
+         dup.rotate(0, 0, rotation);
+
+         if (this.terrain.voronoi(dup.position[0] * 0.01, dup.position[1]* 0.02, this.population_seed) > max) {
+           max = this.terrain.voronoi(dup.position[0], dup.position[1], this.population_seed);
+           max_turtle = this.copy(dup);
+         }
+
+       }
+       this.turtle.orientation = max_turtle.orientation;
+       this.turtle.position = max_turtle.position;
+       this.validateTurtle(this.turtle);
+       this.pushState();
+       this.edges.push(this.getEdge(this.turtle));
+     }
+
+     for (let i = 0; i < this.turtle_stack.length; i++) {
+       let t = this.turtle_stack[i];
+       let curr_trans = t.getTransformation();
+       this.highway_trans_mat.push(curr_trans);
+     }
+   }
+
    // For Population check
    fract(value: number) : number {
      return (value - Math.floor(value));
-   }
-
-   hash3(p: vec2) : vec3 {
-       let q = vec3.fromValues( vec2.dot(p, vec2.fromValues(127.1,311.7)),
-                                vec2.dot(p, vec2.fromValues(269.5,183.3)),
-                                vec2.dot(p, vec2.fromValues(419.2,371.9)));
-       let c = 43758.5453;
-       let val: vec3 = vec3.fromValues(Math.sin(q[0]) * c, Math.sin(q[1]) *c, Math.sin(q[2]) *c);
-       return vec3.fromValues(this.fract(val[0]), this.fract(val[1]), this.fract(val[2]));
-   }
-
-   smoothstep (min: number, max:number, value: number) : number {
-     var x = Math.max(0, Math.min(1, (value-min)/(max-min)));
-     return x*x*(3 - 2*x);
-   };
-
-   voronoi(x: number, y: number, seed: vec2): number {
-     let coord = vec2.fromValues(x, y);
-     let r1 = seed[0];
-     let r2 = seed[1];
-
-     let p = vec2.fromValues(Math.floor(x), Math.floor(y));
-     let rem: vec2 = vec2.fromValues(this.fract(x), this.fract(y));
-
-     let k = 1.0 + 10.0 * Math.pow(1.0 - r2, 4.0);
-
-     let avg_dist = 0.0;
-     let tot_weight = 0.0;
-
-     // Check neighbors
-     for (let j = -2.0; j <= 2.0 ;  j = j + 1.0 ) {
-       for (let i = -2.0; i <= 2.0 ; i = i + 1.0) {
-         let coord: vec2 = vec2.fromValues(i, j);
-         let sum :vec2 = vec2.create();
-         vec2.add(sum, p, coord);
-         let rand_coord: vec3 = vec3.create();
-         vec3.multiply(rand_coord, this.hash3(sum), vec3.fromValues(r1, r1, 1.0));
-         // let r = coord - rem + vec2.fromValues(rand_coord[0], rand_coord[1]);
-         let r :vec2 = vec2.create();
-         vec2.subtract(r, coord, rem);
-         vec2.add(r, r, vec2.fromValues(rand_coord[0], rand_coord[1]));
-         let dist = vec2.dot(r,r);
-         let weight = Math.pow( 1.0 - this.smoothstep(0.0, 2.03, Math.sqrt(dist)), k );
-         avg_dist += rand_coord[2] * weight;
-         tot_weight += weight;
-       }
-     }
-     return avg_dist/tot_weight;
    }
 
    copy(turtle: Turtle): Turtle {
@@ -170,7 +164,7 @@ export default class Lsystem {
        vec3.scaleAndAdd(newPos,t.position, forward, -t.step);
        let b = vec2.fromValues(t.position[0], t.position[1]);
        let a = vec2.fromValues(newPos[0], newPos[1]);
-       let pos = this.intersectionTest(a, b, curr_edge.src, curr_edge.dst);
+       let pos = this.intersectionTest(a, b, curr_edge.a, curr_edge.b);
        if (pos) {
          console.log("okay crossing")
          this.turtle.position = pos;
@@ -238,8 +232,8 @@ export default class Lsystem {
          dup.adjust(rotation);
          dup.rotate(0, 0, rotation);
 
-         if (this.voronoi(dup.position[0] * 0.01, dup.position[1]* 0.02, this.population_seed) > max) {
-           max = this.voronoi(dup.position[0], dup.position[1], this.population_seed);
+         if (this.terrain.voronoi(dup.position[0] * 0.01, dup.position[1]* 0.02, this.population_seed) > max) {
+           max = this.terrain.voronoi(dup.position[0], dup.position[1], this.population_seed);
            max_turtle = this.copy(dup);
          }
 
@@ -259,14 +253,13 @@ export default class Lsystem {
    }
 
    generateRoad() {
-
      for (let i = 0; i < this.edges.length; i++) {
        let curr_edge = this.edges[i];
-       let mdp_x = (curr_edge.src[0] + curr_edge.dst[0])/2;
-       let mdp_y = (curr_edge.src[1] + curr_edge.dst[1])/2;
+       let mdp_x = (curr_edge.a[0] + curr_edge.b[0])/2;
+       let mdp_y = (curr_edge.a[1] + curr_edge.b[1])/2;
        let init = quat.create();
        quat.fromEuler(init, 0, 0,0);
-       if (this.voronoi(mdp_x, mdp_y, this.elevation_seed)  < 0.3) {
+       if (this.terrain.voronoi(mdp_x, mdp_y, this.elevation_seed)  < 0.3) {
          let turtle =  new Turtle(vec3.fromValues(mdp_x, mdp_y, 0.0), init, vec3.fromValues(1, 4.0, 1.0), 0.05);
          this.turtle = turtle;
          this.turtle.moveForward();
@@ -291,4 +284,59 @@ export default class Lsystem {
         this.road_trans_mat.push(curr_trans);
      }
    }
+
+    getVBO(col: number[]) : any {
+
+      let colorsArray = [];
+      let trans1Array = [];
+      let trans2Array = [];
+      let trans3Array = [];
+      let trans4Array = [];
+
+
+      let transformations = this.road_trans_mat;
+
+      for (let i = 0; i < transformations.length; i++) {
+        let trans = transformations[i];
+
+        trans1Array.push(trans[0]);
+        trans1Array.push(trans[1]);
+        trans1Array.push(trans[2]);
+        trans1Array.push(trans[3]);
+
+        trans2Array.push(trans[4]);
+        trans2Array.push(trans[5]);
+        trans2Array.push(trans[6]);
+        trans2Array.push(trans[7]);
+
+        trans3Array.push(trans[8]);
+        trans3Array.push(trans[9]);
+        trans3Array.push(trans[10]);
+        trans3Array.push(trans[11]);
+
+        trans4Array.push(trans[12]);
+        trans4Array.push(trans[13]);
+        trans4Array.push(trans[14]);
+        trans4Array.push(trans[15]);
+
+        colorsArray.push(col[0]);
+        colorsArray.push(col[1]);
+        colorsArray.push(col[2]);
+        colorsArray.push(col[3]);
+      }
+
+      let colors: Float32Array = new Float32Array(colorsArray);
+      let trans1: Float32Array = new Float32Array(trans1Array);
+      let trans2: Float32Array = new Float32Array(trans2Array);
+      let trans3: Float32Array = new Float32Array(trans3Array);
+      let trans4: Float32Array = new Float32Array(trans4Array);
+
+      let vbo: any = {};
+      vbo.colors = colors;
+      vbo.trans1 = trans1;
+      vbo.trans2 = trans2;
+      vbo.trans3 = trans3;
+      vbo.trans4 = trans4;
+      return vbo;
+    }
 }

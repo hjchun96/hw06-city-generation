@@ -34,7 +34,7 @@ export default class Turtle {
     // let scale = vec3.fromValues(0.01, 0.02, 0.01);
     // vec3.multiply(forward, forward, scale);
     // vec3.scaleAndAdd(this.position,this.position,forward, Math.sin(angle)* this.step/4.);
-    vec3.add(this.position, this.position, vec3.fromValues( 0.,Math.sin(angle) * this.step/4. ,0.));
+    vec3.add(this.position, this.position, vec3.fromValues(0.,Math.sin(angle) * this.step/4. ,0.));
   }
 
 

@@ -14,14 +14,17 @@ in vec4 vs_Transform2;
 in vec4 vs_Transform3;
 in vec4 vs_Transform4;
 
+out vec3 fs_Pos;
 out vec4 fs_Col;
-out vec2 fs_Pos;
+out vec4 fs_Nor;
+out vec4 fs_LightVec;
 
 
 void main()
 {
   fs_Col = vs_Col;
-  fs_Pos = vs_Pos.xy;
+  fs_Pos = vs_Pos.xyz;
+  fs_Nor = vs_Nor;
 
   mat4 transforms = mat4(vs_Transform1, vs_Transform2, vs_Transform3, vs_Transform4);
   vec4 modelPos = transforms * vs_Pos;

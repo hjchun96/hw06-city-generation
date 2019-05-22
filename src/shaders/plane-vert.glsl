@@ -1,28 +1,22 @@
 #version 300 es
+precision highp float;
 
-// varying vec2 vUv;
 uniform mat4 u_Model;
-uniform mat4 u_ModelInvTr;
 uniform mat4 u_ViewProj;
-uniform vec2 u_PlanePos; // Our location in the virtual world displayed by the plane
-                            // but in HW3 you'll have to generate one yourself
+uniform vec2 u_PlanePos;
+
 uniform float u_ElevationX;
 uniform float u_ElevationY;
 uniform float u_PopulationX;
 uniform float u_PopulationY;
 
 in vec4 vs_Pos;
-in vec4 vs_Nor;
 in vec4 vs_Col;
+in vec4 vs_Nor;
 
 out vec3 fs_Pos;
 out vec4 fs_Nor;
 out vec4 fs_Col;
-
-out float fs_Sine;
-out vec4 fs_LightVec;  // The direction in which our virtual light lies, relative to each vertex. This is implicitly passed to the fragment shader
-out vec3 vertexViewPos;
-
 
 vec3 hash3( vec2 p ) {
     vec3 q = vec3( dot(p,vec2(127.1,311.7)),
@@ -62,27 +56,41 @@ float voronoi(float x, float y, vec2 seed){
   return avg_dist/tot_weight;
 }
 
-void main()
-{
 
+vec2 convert(vec2 pos) {
+  float x = (pos.x - 100.0) * (2.0 / -200.0) - 0.845;
+  float y = (pos.y + 100.0) * (2.0 / 200.0) - 1.12;
+  return vec2(x, y);
+}
+
+
+void main() {
   fs_Pos = vs_Pos.xyz;
-  float randomized_height;
-  float elevation = voronoi(vs_Pos.x, vs_Pos.z, vec2(u_ElevationX, u_ElevationY));
+  fs_Col = vs_Col;
+  fs_Nor = vs_Nor;
 
-  if (elevation > 0.3) { // LAND
-    randomized_height = 1.0;
+  vec2 pos = convert(vec2(-vs_Pos.z, vs_Pos.x));
+
+  // vec4 modelPos = vec4((vs_Pos.x+1.)/2., 0.0, (vs_Pos.z+1.)/2., 1.0);
+  vec4 modelPos = vec4(vs_Pos.x, 0.0, vs_Pos.z, 1.0);
+
+  // vec2 height_seed = vec2(3, 3.53);
+  // vec2 color_seed = vec2(0.4, 1.0);
+
+  vec2 color_seed = vec2(4.1, 2.6);
+
+  // float elevation = fbm(modelPos.x, modelPos.z, color_seed);
+  float elevation = voronoi(pos.x, pos.y, color_seed);
+
+  float height;
+
+  if (elevation > 0.2) { // LAND
+    height = -0.1;
   } else {
-    randomized_height = 0.5;
+    height = -0.3;
   }
 
- 	// Introduce Light (taken from HW0)
-	// vec4 lightPos = vec4(10, 18, 10, 10);
-	mat3 invTranspose = mat3(u_ModelInvTr);
-  fs_Nor = vec4(invTranspose * vec3(vs_Nor), 0);
-
-  vec4 modelposition = vec4(vs_Pos.x, randomized_height, vs_Pos.z, 1.0);
-  modelposition = u_Model * modelposition;
-  // fs_LightVec = lightPos - modelposition;
-
-  gl_Position = u_ViewProj * modelposition;
+  modelPos[1] = height;
+  modelPos = u_Model * modelPos;
+  gl_Position = u_ViewProj * modelPos;
 }

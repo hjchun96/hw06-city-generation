@@ -31,6 +31,8 @@ class ShaderProgram {
   attrTransform3: number;
   attrTransform4: number;
 
+  unifPlanePos: WebGLUniformLocation;
+
   unifModel: WebGLUniformLocation;
   unifModelInvTr: WebGLUniformLocation;
   unifViewProj: WebGLUniformLocation;
@@ -66,6 +68,9 @@ class ShaderProgram {
     this.attrTransform2 = gl.getAttribLocation(this.prog, "vs_Transform2");
     this.attrTransform3 = gl.getAttribLocation(this.prog, "vs_Transform3");
     this.attrTransform4 = gl.getAttribLocation(this.prog, "vs_Transform4");
+
+    this.unifPlanePos   = gl.getUniformLocation(this.prog, "u_PlanePos");
+
 
     this.unifModel      = gl.getUniformLocation(this.prog, "u_Model");
     this.unifModelInvTr = gl.getUniformLocation(this.prog, "u_ModelInvTr");
@@ -168,6 +173,13 @@ class ShaderProgram {
     if (this.unifPopulationY !== -1) {
       gl.uniform1f(this.unifPopulationY, p_seed[1]);
 
+    }
+  }
+
+  setPlanePos(pos: vec2) {
+    this.use();
+    if (this.unifPlanePos !== -1) {
+      gl.uniform2fv(this.unifPlanePos, pos);
     }
   }
 

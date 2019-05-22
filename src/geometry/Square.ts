@@ -27,9 +27,11 @@ class Square extends Drawable {
                                       0.5,  0.5, 0, 1,
                                      -0.5,  0.5, 0, 1]);
 
-    this.generateIdx();
-    this.generatePos();
-    this.generateCol();
+   this.generateIdx();
+   this.generatePos();
+   this.generateCol();
+   // this.generateNor();
+   // this.generateUV();
     // this.generateTranslate();
 
     this.generateTransform1();
